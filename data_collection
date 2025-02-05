@@ -1,45 +1,58 @@
 import requests
 import json
 import os
+import numpy as np
+from PIL import Image
 
-# API URL
+# MODIS API URL
 url = "https://modis.ornl.gov/rst/api/v1/"
 header = {'Accept': 'application/json'}
 
-# Location
+# Location (Florida)
 latitude = 27.9944024
 longitude = -81.7602544
 
-# MODIS product 
+# MODIS product and band
 product = 'MYD09A1'
-band = 'sur_refl_b01'  
+band = 'sur_refl_b01'  # Surface reflectance band
 
-# Gets dates for location
+# Get available dates for the location
 response = requests.get(f'{url}{product}/dates?latitude={latitude}&longitude={longitude}', headers=header)
 dates = json.loads(response.text)['dates']
 
-# Extract the last 10 dates
+# Get the last 10 dates
 modis_dates = [i['modis_date'] for i in dates[-10:]]
 
-#Save the images to desktop
-desktop_path = os.path.expanduser('~') + '/Desktop/algae_bloom_dataset'
-os.makedirs(desktop_path, exist_ok=True)
+# Create directory to save images
+output_dir = os.path.expanduser('~/Desktop/algae_bloom_images')
+os.makedirs(output_dir, exist_ok=True)
 
-# Loop through dates and fetch data
+# Fetch data and save images
 for date in modis_dates:
-    response = requests.get(f'{url}{product}/subset?latitude={latitude}&longitude={longitude}&band={band}&startDate={date}&endDate={date}&kmAboveBelow=10&kmLeftRight=10', headers=header)
+    response = requests.get(
+        f'{url}{product}/subset?latitude={latitude}&longitude={longitude}&band={band}&startDate={date}&endDate={date}&kmAboveBelow=10&kmLeftRight=10',
+        headers=header
+    )
     subset = json.loads(response.text)
 
     if 'subset' in subset and subset['subset']:
         satellite_data = subset['subset'][0]['data']
-        if satellite_data:  
-            image_filename = f"{desktop_path}/algae_bloom_{date}.json"
-            with open(image_filename, 'w') as file:
-                json.dump(satellite_data, file)
-            print(f" Saved image data for {date} to {image_filename}")
+        
+        if satellite_data:
+            # Convert to numpy array
+            data_array = np.array(satellite_data, dtype=np.float32)
+            
+            # Normalize to 0-255 range for image scaling
+            data_array = np.clip((data_array + 100) / 16100 * 255, 0, 255).astype(np.uint8)
+            
+            # Convert to image and save
+            image = Image.fromarray(data_array)
+            image_path = f"{output_dir}/algae_bloom_{date}.png"
+            image.save(image_path)
+            print(f"Saved image: {image_path}")
         else:
             print(f"No valid data for {date}. Skipping...")
     else:
-        print(f" No data found for {date}. Skipping...")
+        print(f"No data found for {date}. Skipping...")
 
-print("Satellite data saved.")
+print("Satellite images saved.")
