@@ -1,0 +1,68 @@
+import requests
+import json
+import os
+
+# API
+url = "https://modis.ornl.gov/rst/api/v1/"
+header = {'Accept': 'application/json'}  # For JSON response
+
+#Location
+latitude = 27.9944024
+longitude = -81.7602544
+
+# MODIS product
+product = 'MYD09A1'
+
+# Getting dates for chosen location
+response = requests.get(f'{url}{product}/dates?latitude={latitude}&longitude={longitude}', headers=header)
+
+# Validate response
+if response.status_code == 200:
+    dates = json.loads(response.text).get('dates', [])
+else:
+    print("Failed to fetch dates from API.")
+    exit()
+
+# Extract the last 10 dates
+modis_dates = [i['modis_date'] for i in dates[-10:]]
+
+# Create a directory to save the images
+desktop_path = os.path.expanduser('~') + '/Desktop/algae_bloom_dataset'
+os.makedirs(desktop_path, exist_ok=True)
+
+# Loop through the dates and get the image data
+saved_files = 0
+for date in modis_dates:
+    # Fetch the subset data for the given date
+    response = requests.get(
+        f'{url}{product}/subset?latitude={latitude}&longitude={longitude}&band=surface_reflectance_1km&startDate={date}&endDate={date}&kmAboveBelow=10&kmLeftRight=10',
+        headers=header
+    )
+
+    # Validate response
+    if response.status_code != 200:
+        print(f"Failed to fetch data for {date}. Skipping...")
+        continue
+
+    # Parse the JSON response
+    subset = json.loads(response.text)
+
+    if 'subset' in subset and subset['subset']:
+        satellite_data = subset['subset'][0]['data']
+
+        # Ensure data exists before saving
+        if satellite_data:
+            image_filename = f"{desktop_path}/algae_bloom_{date}.json"
+            with open(image_filename, 'w') as file:
+                json.dump(satellite_data, file)
+            print(f"Saved image data for {date} to {image_filename}")
+            saved_files += 1
+        else:
+            print(f"No valid data found for {date}. Skipping...")
+    else:
+        print(f"No data found for date {date}")
+
+if saved_files > 0:
+    print(f"Download complete! {saved_files} satellite data files saved.")
+else:
+    print("No data was available for any of the requested dates. Nothing was saved.")
