@@ -2,32 +2,32 @@ import requests
 import json
 import os
 import numpy as np
-from PIL import Image
+import matplotlib.pyplot as plt
 
-# MODIS API URL
+# API base URL
 url = "https://modis.ornl.gov/rst/api/v1/"
 header = {'Accept': 'application/json'}
 
-# Location (Florida)
+# Location coordinates
 latitude = 27.9944024
 longitude = -81.7602544
 
-# MODIS product and band
+# MODIS product 
 product = 'MYD09A1'
-band = 'sur_refl_b01'  # Surface reflectance band
+band = 'sur_refl_b01'
 
 # Get available dates for the location
 response = requests.get(f'{url}{product}/dates?latitude={latitude}&longitude={longitude}', headers=header)
 dates = json.loads(response.text)['dates']
 
-# Get the last 10 dates
+# Extract the last 10 dates
 modis_dates = [i['modis_date'] for i in dates[-10:]]
 
-# Create directory to save images
-output_dir = os.path.expanduser('~/Desktop/algae_bloom_images')
+# Path to save images
+output_dir = os.path.expanduser("~/Desktop/algae_bloom_images")
 os.makedirs(output_dir, exist_ok=True)
 
-# Fetch data and save images
+# Gets data and saves images
 for date in modis_dates:
     response = requests.get(
         f'{url}{product}/subset?latitude={latitude}&longitude={longitude}&band={band}&startDate={date}&endDate={date}&kmAboveBelow=10&kmLeftRight=10',
@@ -39,16 +39,13 @@ for date in modis_dates:
         satellite_data = subset['subset'][0]['data']
         
         if satellite_data:
-            # Convert to numpy array
+            # Convert to numpy array and normalize
             data_array = np.array(satellite_data, dtype=np.float32)
-            
-            # Normalize to 0-255 range for image scaling
             data_array = np.clip((data_array + 100) / 16100 * 255, 0, 255).astype(np.uint8)
-            
-            # Convert to image and save
-            image = Image.fromarray(data_array)
+
+            # Save as a colored image
             image_path = f"{output_dir}/algae_bloom_{date}.png"
-            image.save(image_path)
+            plt.imsave(image_path, data_array, cmap='viridis', dpi=300)
             print(f"Saved image: {image_path}")
         else:
             print(f"No valid data for {date}. Skipping...")
