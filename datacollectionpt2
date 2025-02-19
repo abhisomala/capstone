@@ -1,0 +1,68 @@
+import requests
+import json
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+
+# API base URL
+url = "https://modis.ornl.gov/rst/api/v1/"
+header = {'Accept': 'application/json'}
+
+# Location coordinates
+latitude = 27.9944024
+longitude = -81.7602544
+
+# MODIS product 
+product = 'MYD09A1'
+band = 'sur_refl_b01'
+
+# Get available dates for the location
+response = requests.get(f'{url}{product}/dates?latitude={latitude}&longitude={longitude}', headers=header)
+dates = json.loads(response.text)['dates']
+
+# Extract the last 10 dates
+modis_dates = [i['modis_date'] for i in dates[-10:]]
+
+# Path to save images
+output_dir = os.path.expanduser("~/Desktop/algae_bloom_images")
+os.makedirs(output_dir, exist_ok=True)
+
+# Increase the spatial resolution (zoomed-out view)
+km_range = 50  # Increase this value to get a larger image
+
+# Gets data and saves images
+for date in modis_dates:
+    response = requests.get(
+        f'{url}{product}/subset?latitude={latitude}&longitude={longitude}&band={band}&startDate={date}&endDate={date}&kmAboveBelow={km_range}&kmLeftRight={km_range}',
+        headers=header
+    )
+    subset = json.loads(response.text)
+
+    if 'subset' in subset and subset['subset']:
+        satellite_data = subset['subset'][0]['data']
+        
+        if satellite_data:
+            # Convert to numpy array and normalize
+            data_array = np.array(satellite_data, dtype=np.float32)
+
+            # Reshape assuming a square image
+            size = int(np.sqrt(len(data_array)))  # Get closest square size
+            if size * size != len(data_array):  # If not a perfect square, skip
+                print(f"Unexpected data shape for {date}. Skipping...")
+                continue
+
+            data_array = data_array.reshape((size, size))
+
+            # Normalize data to fit image range (0-255)
+            data_array = np.clip((data_array + 100) / 16100 * 255, 0, 255).astype(np.uint8)
+
+            # Save as a colored image
+            image_path = f"{output_dir}/algae_bloom_{date}.png"
+            plt.imsave(image_path, data_array, cmap='viridis', dpi=300)
+            print(f"Saved image: {image_path}")
+        else:
+            print(f"No valid data for {date}. Skipping...")
+    else:
+        print(f"No data found for {date}. Skipping...")
+
+print("Satellite images saved.")
