@@ -1,46 +1,46 @@
 import torch
+from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
-from torch.utils.data import DataLoader, Dataset
-import os
 from PIL import Image
-import random
+import pandas as pd
+import os
 
-class CustomImageDataset(Dataset):
-    def __init__(self, image_folder, transform=None):
-        self.image_folder = image_folder
-        self.image_files = [os.path.join(image_folder, f) for f in os.listdir(image_folder) if f.endswith(('.png', '.jpg', '.jpeg'))]
+class AlgaeBloomDataset(Dataset):
+    def __init__(self, csv_file, transform=None):
+        self.data = pd.read_csv(csv_file)
         self.transform = transform
 
     def __len__(self):
-        return len(self.image_files)
+        return len(self.data)
 
     def __getitem__(self, idx):
-        img_path = self.image_files[idx]
-        image = Image.open(img_path).convert("RGB")
+        image_path = self.data.iloc[idx, 0]  # First column is the image path
+        label = int(self.data.iloc[idx, 1])  # Second column is the label (0 or 1)
+        
+        image = Image.open(image_path).convert("RGB")  # Ensure it's RGB
+        
         if self.transform:
             image = self.transform(image)
+        
+        return image, torch.tensor(label, dtype=torch.float32)  # Match BCE loss dtype
 
-        label = random.randint(0, 1)  # Assigns a random label (binary classification)
-
-        return image, torch.tensor(label, dtype=torch.long)  
 def get_data_loaders(dataset_path, batch_size=32):
+    train_csv = os.path.join(dataset_path, "labels.csv")  # Use your labels.csv
     transform = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize((128, 128)),  # Resize images
         transforms.ToTensor(),
+        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])  # Normalize for stability
     ])
+    
+    dataset = AlgaeBloomDataset(train_csv, transform=transform)
 
-    train_path = os.path.join(dataset_path, "train")
-    val_path = os.path.join(dataset_path, "val")
-    test_path = os.path.join(dataset_path, "test")
-
-    train_dataset = CustomImageDataset(train_path, transform)
-    val_dataset = CustomImageDataset(val_path, transform)
-    test_dataset = CustomImageDataset(test_path, transform)
+    # Split into training (80%) and test (20%)
+    train_size = int(0.8 * len(dataset))
+    test_size = len(dataset) - train_size
+    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size])
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-    num_classes = 1  # Since there are no subfolders, treating all as one class
+    return train_loader, test_loader, None, 2  # Binary classification, so 2 classes
 
-    return train_loader, test_loader, val_loader, num_classes
