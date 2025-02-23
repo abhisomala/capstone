@@ -1,27 +1,35 @@
 import torch
+import torch.nn as nn
+from model import AlgaeBloomClassifier  
 from dataset import get_data_loaders
-from model import get_model
-
-# Dataset path
-dataset_path = "C:/Users/somal/OneDrive/Desktop/Capstone_Model/algae_bloom_dataset"
 
 # Load test data
-_, test_loader, _, num_classes = get_data_loaders(dataset_path)
+dataset_path = "C:/Users/somal/OneDrive/Desktop/Capstone_Model/algae_bloom_dataset"
+_, test_loader, _, _ = get_data_loaders(dataset_path, batch_size=16)
 
-# Load model
-model = get_model(num_classes)
-model.load_state_dict(torch.load("model.pth"))
-model.eval()
+# Load the model
+model = AlgaeBloomClassifier()  
+model.load_state_dict(torch.load("best_model.pth"))  #Load saved weights
+model.eval()  # Set model to evaluation mode
 
-# Evaluate on test set
+# Define loss function
+criterion = nn.BCEWithLogitsLoss()
+
+# Evaluation loop
+total_loss = 0
 correct = 0
 total = 0
+
 with torch.no_grad():
     for images, labels in test_loader:
+        labels = labels.view(-1, 1)
         outputs = model(images)
-        _, predicted = torch.max(outputs, 1)
+        loss = criterion(outputs, labels)
+        total_loss += loss.item()
+
+        predicted = (torch.sigmoid(outputs) > 0.5).float()
         correct += (predicted == labels).sum().item()
         total += labels.size(0)
 
 accuracy = 100 * correct / total
-print(f"Test Accuracy: {accuracy:.2f}%")
+print(f"Test Loss: {total_loss:.4f}, Test Accuracy: {accuracy:.2f}%")
