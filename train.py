@@ -38,5 +38,6 @@ for epoch in range(num_epochs):
     print(f"Epoch {epoch+1}/{num_epochs}, Loss: {total_loss:.4f}, Accuracy: {accuracy:.2f}%")
 
     #Save model after each epoch
-    torch.save(model.state_dict(), "best_model.pth")
-    print("Model saved.")
+    
+torch.save(model.state_dict(), "best_model.pth")
+print("Model saved.")

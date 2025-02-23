@@ -27,7 +27,7 @@ def detect_algae_bloom(image_path):
 
 # Process all images and store labels
 labels = []
-for folder in ["train", "test", "val"]:
+for folder in ["train", "test", "val"]: 
     folder_path = os.path.join(dataset_path, folder)
     
     if not os.path.exists(folder_path):
