@@ -45,7 +45,7 @@ for folder in ["train", "test", "val"]:
 
 # Save labels to CSV
 df = pd.DataFrame(labels, columns=["image_path", "label"])
-csv_path = os.path.join(dataset_path, "labels.csv")
+csv_path = os.path.join("C:/Users/somal/Desktop/capstone", "labels.csv")
 df.to_csv(csv_path, index=False)
 
 print(f"Labeling complete! Saved labels to {csv_path}")
