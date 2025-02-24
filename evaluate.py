@@ -1,3 +1,6 @@
+#Abhijit Somala
+# This file serves to identify oveerfitting and underfitting and understand if it is "fitted" to closely to the training data and figure out how well it can generalize across data.
+
 import torch
 import torch.nn as nn
 from model import AlgaeBloomClassifier  

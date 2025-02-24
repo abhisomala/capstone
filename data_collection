@@ -1,3 +1,6 @@
+#Abhijit Somala
+# This file serves to extract images from the NASA MODIS satellite. 
+
 import requests
 import json
 import os

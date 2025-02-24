@@ -1,3 +1,6 @@
+#Abhijit Somala
+# Another helper function to the train.py
+
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -15,5 +18,5 @@ class AlgaeBloomClassifier(nn.Module):
         x = self.pool(F.relu(self.conv2(x)))
         x = x.view(x.size(0), -1)  # Flatten
         x = F.relu(self.fc1(x))
-        x = self.fc2(x)  # NO SIGMOID here (handled by loss function)
+        x = self.fc2(x)  # Loss function
         return x

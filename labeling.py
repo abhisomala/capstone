@@ -1,3 +1,7 @@
+# Abhijit Somala
+#This file takes each image saved in the dataset and labels them in a diffrent dataset "labels.csv"
+# It includes the path to make it easier to refrence and use
+
 import os
 import cv2
 import numpy as np
