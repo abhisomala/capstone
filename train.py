@@ -11,7 +11,7 @@ from dataset import get_data_loaders
 # Load data
 dataset_path = "C:/Users/somal/OneDrive/Desktop/Capstone_Model/algae_bloom_dataset"
 train_loader, test_loader, _, _ = get_data_loaders(dataset_path, batch_size=16)
-
+dataset_length = len(train_loader)
 # Model, loss function, optimizer
 model = AlgaeBloomClassifier()
 criterion = nn.BCEWithLogitsLoss()  #Loss function
@@ -27,6 +27,7 @@ for epoch in range(num_epochs):
 
     for images, labels in train_loader:
         labels = labels.view(-1, 1)  # Checks if labels match output shape
+        breakpoint()
         optimizer.zero_grad()
         outputs = model(images)
         loss = criterion(outputs, labels)
@@ -34,12 +35,13 @@ for epoch in range(num_epochs):
         optimizer.step()
 
         total_loss += loss.item()
+        
         predicted = (torch.sigmoid(outputs) > 0.5).float()  #Convert logits to binary labels
         correct += (predicted == labels).sum().item()
         total += labels.size(0)
 
     accuracy = 100 * correct / total
-    print(f"Epoch {epoch+1}/{num_epochs}, Loss: {total_loss:.4f}, Accuracy: {accuracy:.2f}%")
+    print(f"Epoch {epoch+1}/{num_epochs}, Loss: {(total_loss/dataset_length):.4f}, Accuracy: {accuracy:.2f}%")
 
     #Save model after each epoch
     
