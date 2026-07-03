@@ -1,0 +1,132 @@
+# Single source of truth for paths and pipeline configuration.
+# No machine-specific absolute paths live anywhere in src/ — everything reads from here.
+# Relative paths are resolved against the repository root by src/utils/config.py.
+
+paths:
+  data_dir: data
+  raw_ground_truth_dir: data/ground_truth/raw
+  labels_csv: data/ground_truth/labels.csv
+  stations_waterbody_csv: data/ground_truth/stations_waterbody.csv
+  waterbody_cache: data/ground_truth/waterbody_cache.json
+  imagery_patches: data/imagery/patches.jsonl
+  imagery_dates_cache: data/imagery/dates_cache.json
+  features_csv: data/features/features.csv
+  logs_dir: logs
+  models_dir: models
+
+ground_truth:
+  # Source: EPA / USGS Water Quality Portal. Public REST API, no authentication.
+  source_name: "EPA Water Quality Portal (waterqualitydata.us)"
+  result_endpoint: "https://www.waterqualitydata.us/data/Result/search"
+
+  # Primary label analyte: microcystins (the dominant cyanobacterial toxin).
+  # Directly measures the "harmful" in HAB, unlike chlorophyll-a which cannot
+  # separate harmful cyanobacteria from benign algae.
+  primary_characteristic: "Microcystin"
+  auxiliary_characteristics:
+    - "Chlorophyll a"
+
+  # Pilot region: U.S. states with active cyanobacteria HAB monitoring programs.
+  # Confirmed non-trivial microcystin record counts (legacy Result endpoint).
+  # Expanded 2026-07-02 (item 1, sample size): added the high-volume Midwest small-lake
+  # states (NE, IA, MN, WI) — these are dominated by small reservoirs, which is exactly
+  # the CyAN-invisible waterbody class this product targets (see pathtoselleable.md).
+  statecodes:
+    OR: "US:41"
+    CA: "US:06"
+    WA: "US:53"
+    KS: "US:20"
+    FL: "US:12"
+    NY: "US:36"
+    OH: "US:39"
+    VT: "US:50"
+    NE: "US:31"
+    IA: "US:19"
+    MN: "US:27"
+    WI: "US:55"
+
+  date_start: "01-01-2010"   # MM-DD-YYYY, as required by the WQP API; full modern history
+  date_end: "12-31-2024"
+
+  # Bloom-positive threshold for total microcystins (micrograms per liter).
+  # U.S. EPA (2019) Recommended Recreational Ambient Water Quality Criteria /
+  # Swimming Advisory for microcystins = 8 µg/L.
+  # WHO (2021) provisional recreational guideline = 24 µg/L (documented alternative).
+  microcystin_bloom_threshold_ugL: 8.0
+  microcystin_threshold_reference: "U.S. EPA 2019 recreational criterion (8 µg/L microcystins); WHO 2021 recreational guideline 24 µg/L"
+
+waterbody:
+  # Classify each station's waterbody by whether CyAN (300 m Sentinel-3 OLCI) could
+  # resolve it. Used to quantify the coverage gap that this project fills — see
+  # pathtoselleable.md. Source: NHDPlus V2.1 waterbody polygons via EPA EnviroAtlas
+  # ArcGIS REST service (public, no auth).
+  nhd_waterbody_endpoint: "https://enviroatlas.epa.gov/arcgis/rest/services/Supplemental/NHDPlusV21_EA/MapServer/4/query"
+  # A CyAN 300 m pixel covers 0.09 km2. With the mandatory 1-pixel land-adjacency
+  # buffer, a lake needs to be well above one pixel to yield any valid water pixel,
+  # and the operational "resolvable" set (~2,300 lakes) requires >=3 valid pixels.
+  single_pixel_km2: 0.09          # below this: not even one CyAN pixel -> invisible
+  reliable_resolvable_km2: 1.0    # at/above this: plausibly in CyAN's resolvable set
+  max_workers: 8
+
+imagery:
+  # Satellite imagery co-located with each ground-truth measurement.
+  # Source: NASA MODIS/ORNL REST API (modis.ornl.gov) — public, no authentication.
+  # MOD09A1 = Terra surface reflectance, 500 m, 8-day composite.
+  product: "MOD09A1"
+  reflectance_bands:
+    - "sur_refl_b01"   # red    620-670 nm
+    - "sur_refl_b02"   # NIR    841-876 nm
+    - "sur_refl_b03"   # blue   459-479 nm
+    - "sur_refl_b04"   # green  545-565 nm
+    - "sur_refl_b05"   # NIR    1230-1250 nm
+    - "sur_refl_b06"   # SWIR   1628-1652 nm
+    - "sur_refl_b07"   # SWIR   2105-2155 nm
+  state_band: "sur_refl_state_500m"   # cloud / quality flags for masking
+  reflectance_scale: 0.0001
+  patch_km: 1                          # kmAboveBelow/kmLeftRight -> ~5x5 pixels
+  # Item 2 (temporal offset): matched measurement-to-composite offset is already small
+  # (median ~2 days). Tolerance 4 drops only gap-matched samples. NOTE: MOD09A1 is an
+  # 8-day COMPOSITE, so every sample carries ~8 days of intrinsic temporal aggregation
+  # regardless of this knob — genuinely tightening the window requires a daily product
+  # (MOD09GA) or Sentinel-2 (item 3). See pathtoselleable.md.
+  temporal_tolerance_days: 4
+  min_clean_pixels: 3                  # drop a sample with fewer non-cloud pixels
+  # Pilot scope: all stations that ever recorded a bloom (rich positive signal),
+  # plus a sample of bloom-free stations for negative diversity. Keeps collection
+  # bounded and the task well defined: among monitored HAB-prone lakes, is this
+  # date's imagery a bloom?
+  station_selection: "positive_bearing"
+  extra_negative_stations: 60
+  max_measurements_per_station: 12
+  max_workers: 6                       # polite concurrency against the ORNL API
+  random_seed: 42
+
+split:
+  # Site-based grouping prevents a single monitoring station from appearing in
+  # more than one of train/val/test (spatial near-duplicate leakage).
+  method: "site"          # "site" (group by station) or "temporal" (holdout by year)
+  val_fraction: 0.15
+  test_fraction: 0.20
+  random_seed: 42
+  temporal_test_years: [2023]     # used only when method == "temporal"
+  temporal_val_years: [2022]
+
+training:
+  epochs: 300
+  batch_size: 32
+  learning_rate: 0.0003           # lowered from 1e-3: at 1e-3 val AUC could peak at
+                                  # epoch 1 then decay, tripping early stopping into a
+                                  # degenerate checkpoint (seed-sensitive). 3e-4 trains
+                                  # smoothly. The real fix for trust is k-fold CV below.
+  weight_decay: 0.0001            # L2 regularisation
+  dropout: 0.3
+  hidden: [32, 16]
+  early_stopping_patience: 30     # epochs without val-metric improvement before stopping
+  random_seed: 42
+  checkpoint_name: "best_model.pt"
+
+cross_validation:
+  # Grouped k-fold across stations: the honest metric is a distribution over folds,
+  # not one lucky split (a single split gave anywhere from 0.51 to 0.68 here).
+  n_splits: 5
+  random_seed: 42
