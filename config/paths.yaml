@@ -11,6 +11,7 @@ paths:
   imagery_patches: data/imagery/patches.jsonl
   imagery_dates_cache: data/imagery/dates_cache.json
   features_csv: data/features/features.csv
+  features_s2_csv: data/features/features_s2.csv
   logs_dir: logs
   models_dir: models
 
@@ -67,6 +68,41 @@ waterbody:
   single_pixel_km2: 0.09          # below this: not even one CyAN pixel -> invisible
   reliable_resolvable_km2: 1.0    # at/above this: plausibly in CyAN's resolvable set
   max_workers: 8
+
+imagery_s2:
+  # Sentinel-2 L2A surface reflectance (10-20 m) via the AWS Earth Search STAC catalog
+  # (Element84) — chosen over Copernicus Data Space (needs OAuth) and Planetary Computer
+  # (needs token signing) because it is fully anonymous and serves cloud-optimised GeoTIFFs
+  # readable by windowed HTTP range requests. This is item 1 (resolution) in model_quality.md.
+  stac_endpoint: "https://earth-search.aws.element84.com/v1"
+  collection: "sentinel-2-l2a"
+  # Sentinel-2 archive starts 2015-06-27; earlier station-dates are dropped for S2 (they
+  # keep their MODIS features). Report how many are affected each run.
+  min_date: "2015-06-27"
+  temporal_window_days: 7        # search +/- this many days for a scene near the measurement
+  max_cloud_cover: 80            # scene-level pre-filter; per-pixel SCL masking still applies
+  max_scenes_tried: 4            # per station-date, try only the 4 least-cloudy scenes (bounds cost)
+  patch_m: 300                   # square patch side in metres, centred on the station
+  patch_px: 30                   # resampled to this grid (10 m); 20 m bands bilinear-upsampled
+  min_clean_pixels: 10           # drop a sample with fewer SCL-clean pixels
+  # SCL classes to KEEP (4 vegetation, 5 bare, 6 water, 7 unclassified). Everything else —
+  # cloud (8,9), cirrus (10), shadow (2,3), snow (11), saturated (1), nodata (0) — is masked.
+  scl_keep_classes: [4, 5, 6, 7]
+  # Item 1 mirrors the MODIS 7-band feature schema by spectral role (no red-edge yet — that
+  # is item 3, features). Maps output slot -> Earth Search asset key.
+  band_roles:
+    sur_refl_b01: "red"      # ~665 nm  (MODIS b01 red)
+    sur_refl_b02: "nir"      # ~842 nm  (MODIS b02 NIR)
+    sur_refl_b03: "blue"     # ~490 nm  (MODIS b03 blue)
+    sur_refl_b04: "green"    # ~560 nm  (MODIS b04 green)
+    sur_refl_b05: "nir08"    # ~865 nm  (MODIS b05; nearest S2 narrow NIR)
+    sur_refl_b06: "swir16"   # ~1610 nm (MODIS b06 SWIR1)
+    sur_refl_b07: "swir22"   # ~2190 nm (MODIS b07 SWIR2)
+  scl_asset: "scl"
+  refl_scale: 0.0001
+  refl_offset: -0.1              # harmonised BOA offset (baseline >= 04.00); read per-asset when present
+  max_workers: 6                 # reduced from 16: 16 procs on a 10-core box was getting the job killed
+  max_samples: 2600              # cap for the session (all in-era station-dates fit under this)
 
 imagery:
   # Satellite imagery co-located with each ground-truth measurement.
