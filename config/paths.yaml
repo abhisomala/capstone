@@ -14,6 +14,41 @@ paths:
   features_s2_csv: data/features/features_s2.csv
   logs_dir: logs
   models_dir: models
+  # Untouched holdout (final_verification.md item 1): imagery/features for stations that
+  # were NEVER part of any features.csv used in feature-engineering iteration. Kept in
+  # separate files so the training pipeline never sees them.
+  holdout_patches: data/imagery/holdout_patches.jsonl
+  holdout_features_csv: data/features/features_holdout.csv
+  holdout_result_json: logs/holdout_result.json
+  # Item 1, powered version: the untouched holdout drawn from ENTIRELY NEW STATES (never
+  # collected by this project), which is where real untouched bloom-bearing stations with
+  # valid coordinates actually exist. Separate files again so training never sees them.
+  holdout_state_labels_csv: data/ground_truth/holdout_state_labels.csv
+  holdout_state_patches: data/imagery/holdout_state_patches.jsonl
+  holdout_state_features_csv: data/features/features_holdout_state.csv
+  holdout_state_result_json: logs/holdout_state_result.json
+  # Item 2 CyAN agreement: cache of the official EPA CyAN CI time series per station coord.
+  cyan_cache: data/ground_truth/cyan_cache.json
+  cyan_agreement_samples: logs/cyan_agreement_samples.csv
+
+holdout:
+  # The provably-untouched positive-bearing stations number only 5 (all single-measurement,
+  # no negative dates); the two untouched stations that carry negative dates (Carter Lake,
+  # NE) have no valid coordinates in the WQP source (0,0) and are excluded — a location
+  # cannot be invented. Negatives therefore come from a seed-fixed random sample of
+  # untouched never-bloomer stations. See final_verification.md item 1 for the full
+  # accounting of why a well-powered untouched holdout is not constructible.
+  n_negative_stations: 90
+  random_seed: 20260703
+  # Powered untouched holdout: pull microcystin ground truth for states this project has
+  # NEVER collected, so every station is provably untouched by any feature iteration and
+  # yet real bloom-bearing stations with valid coordinates exist. Michigan and Missouri
+  # were chosen after probing candidates (MI: 17 bloom-bearing stations / 86 positives;
+  # MO: 16 / 26) — the two new states with the most untouched positive signal.
+  new_states:
+    MI: "US:26"
+    MO: "US:29"
+  n_negative_stations_new: 60   # extra negative-only stations sampled from the new states
 
 ground_truth:
   # Source: EPA / USGS Water Quality Portal. Public REST API, no authentication.
@@ -166,3 +201,22 @@ cross_validation:
   # not one lucky split (a single split gave anywhere from 0.51 to 0.68 here).
   n_splits: 5
   random_seed: 42
+
+cyan:
+  # Official EPA Cyanobacteria Assessment Network (CyAN) REST API — public, NO auth.
+  # /location/data/{lat}/{lng}/all returns the weekly-max cyanobacteria index (CI) sampled
+  # from the operational CYAN_CONUS_300m CI raster at that coordinate, as cyanobacteria
+  # cell concentration (cells/mL). This is the real CyAN product (not a proxy): the bulk
+  # GeoTIFF rasters on NASA oceandata require Earthdata auth, but this API serves the same
+  # raster's per-coordinate value openly. Archive begins ~2020, so agreement is computed on
+  # the 2020+ subset of station-dates.
+  api_base: "https://cyan.epa.gov/cyan/cyano/location/data"
+  era_start_year: 2020
+  temporal_window_days: 7          # CyAN is weekly; match a station-date to the nearest week
+  max_workers: 6
+  # Bloom thresholds on CyAN cell concentration. WHO recreational Alert Levels are the
+  # documented reference: Alert Level 1 = 20,000 cells/mL (low probability of effects),
+  # Alert Level 2 = 100,000 cells/mL (moderate/high). Agreement is reported at both; the
+  # 100,000 level is the primary "bloom" comparison against the model's 8 µg/L microcystin.
+  who_alert1_cells_ml: 20000
+  who_alert2_cells_ml: 100000
